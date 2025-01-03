@@ -35,10 +35,13 @@ outputs = model(**inputs)
 print("Model and tokenizer are working!")
 
 
-#LOADING THE FIRST DATASET, LIAR DATASET FROM KAGGLE
+#LOADING THE FIRST DATASET, LIAR DATASET FROM KAGGLE AND PROCESSING DATA
+columns = ['id','label','text','subject','speaker','job title','state info','party','barely true','false','half true','mostly true','pants on fire','context']
+label_map = {'pants-fire':-3, 'false':-2, 'barely-true':-1, 'half-true':1, 'mostly-true':2, 'true':3}
+
+train = pd.read_csv('datasets/archive/train.tsv',sep='\t',header=None, names=columns)
+test =  pd.read_csv('datasets/archive/test.tsv',sep='\t',header=None, names=columns)
+valid = pd.read_csv('datasets/archive/valid.tsv',sep='\t',header=None, names=columns)
 
 
-df = pd.read_csv('datasets/archive/train.tsv', sep='\t')
-
-
-print(df.head())
+print(train.head())
