@@ -33,3 +33,12 @@ inputs = tokenizer(sample_text, return_tensors="pt")
 outputs = model(**inputs)
 
 print("Model and tokenizer are working!")
+
+
+#LOADING THE FIRST DATASET, LIAR DATASET FROM KAGGLE
+
+
+df = pd.read_csv('datasets/archive/train.tsv', sep='\t')
+
+
+print(df.head())
