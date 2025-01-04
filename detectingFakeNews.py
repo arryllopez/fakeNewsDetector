@@ -7,8 +7,10 @@ import transformers
 
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
 from torch.utils.data import Dataset, DataLoader
+from torch.optim import AdamW
+from tqdm import tqdm  
 
 
 print("The libraries are working")
@@ -52,7 +54,7 @@ valid = pd.read_csv('datasets/archive/valid.tsv',sep='\t',header=None, names=col
 
 print(train.head())
 
-#BEGINNING TO TRAIN THE MODEL
+
 
 # Map labels to numeric values (custom mapping if not already done)
 label_map = {
@@ -85,3 +87,106 @@ X_test = tokenize_function(test['text'].tolist())
 y_train = torch.tensor(train['label'].values)
 y_valid = torch.tensor(valid['label'].values)
 y_test = torch.tensor(test['label'].values)
+
+class LIARDataset(Dataset):
+    def __init__(self, inputs, labels):
+        self.inputs = inputs
+        self.labels = labels
+
+    def __len__(self):
+        return len(self.labels)
+
+    def __getitem__(self, idx):
+        return {
+            'input_ids': self.inputs['input_ids'][idx],
+            'attention_mask': self.inputs['attention_mask'][idx],
+            'labels': self.labels[idx]
+        }
+
+
+
+
+# Create datasets
+train_dataset = LIARDataset(X_train, y_train)
+valid_dataset = LIARDataset(X_valid, y_valid)
+test_dataset = LIARDataset(X_test, y_test)
+
+# Create dataloaders
+train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True)
+valid_loader = DataLoader(valid_dataset, batch_size=16)
+test_loader = DataLoader(test_dataset, batch_size=16)
+
+
+
+
+# Load pre-trained model with a classification head
+model = AutoModelForSequenceClassification.from_pretrained(
+    'bert-base-uncased',  # Replace with your chosen transformer model
+    num_labels=6          # Number of classes in the LIAR dataset
+)
+
+
+
+
+optimizer = AdamW(model.parameters(), lr=5e-5)  # Adjust learning rate as needed
+loss_fn = torch.nn.CrossEntropyLoss()
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+model.to(device)
+
+
+
+
+# Training loop
+epochs = 3  # Number of epochs
+for epoch in range(epochs):
+    model.train()  # Set model to training mode
+    total_loss = 0
+
+    for batch in tqdm(train_loader):
+        # Move data to device
+        input_ids = batch['input_ids'].to(device)
+        attention_mask = batch['attention_mask'].to(device)
+        labels = batch['labels'].to(device)
+
+        # Forward pass
+        outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
+        loss = outputs.loss
+        logits = outputs.logits
+
+        # Backward pass
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        total_loss += loss.item()
+
+    print(f"Epoch {epoch + 1}/{epochs}, Loss: {total_loss / len(train_loader)}")
+
+
+#EVALUTATION 
+from sklearn.metrics import accuracy_score
+
+model.eval()  
+all_preds = []
+all_labels = []
+
+with torch.no_grad(): 
+    for batch in valid_loader:
+        
+        input_ids = batch['input_ids'].to(device)
+        attention_mask = batch['attention_mask'].to(device)
+        labels = batch['labels'].to(device)
+
+        # Forward pass
+        outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+        preds = torch.argmax(outputs.logits, axis=1)
+        all_preds.extend(preds.cpu().numpy())
+        all_labels.extend(labels.cpu().numpy())
+
+# Compute accuracy (how well the model does on the valid dataset)
+accuracy = accuracy_score(all_labels, all_preds)
+print(f"Validation Accuracy: {accuracy:.4f}")
+
+model.save_pretrained('./fake_news_model')
+tokenizer.save_pretrained('./fake_news_model')
